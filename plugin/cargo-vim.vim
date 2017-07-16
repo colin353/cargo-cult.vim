@@ -11,8 +11,9 @@
 
 let s:plugin_path = expand('<sfile>:p:h')
 
-func! CargoQuickFix()
-	let data = eval(system("python " . s:plugin_path . "/cargo.py " . expand('%:p') . " " . getcwd()))
+func! RunCargoCommand(command)
+	echom "running `cargo " . a:command . "`..."
+	let data = eval(system("python " . s:plugin_path . "/cargo.py " . a:command . " " . expand('%:p') . " " . getcwd()))
 	call setqflist(data.quickfix)
 	echom data.message
 	if len(data.quickfix)
@@ -22,5 +23,5 @@ func! CargoQuickFix()
 	endif
 endf
 
-com! -nargs=* CargoQuickFix call CargoQuickFix()
-
+com! -nargs=* CargoBuild call RunCargoCommand("build")
+com! -nargs=* CargoTest call RunCargoCommand("test")

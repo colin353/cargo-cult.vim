@@ -12,6 +12,8 @@ import json
 import os
 import sys
 
+import parse
+
 def finish(output):
     sys.stdout.write(json.dumps(output))
     sys.exit(0)
@@ -22,28 +24,16 @@ def error(reason):
         "quickfix": []
     })
 
-class Message(object):
-    def __init__(self):
-        self.text = ""
-        self.filename = ""
-        self.line = 0
-        self.column = 0
+# transform_relative_path takes a file path relative to the 
+# cargo directory and transforms it into a path relative to the
+# CWD inside of vim, which is passed as a command line argument.
+def transform_relative_path(cargo_path):
+    return os.path.relpath("%s/%s" % (CARGO_DIR, cargo_path), CWD)
 
-    def relative_file_path(self):
-        common_prefix = os.path.commonprefix("%s/%s" % (CARGO_DIR, self.filename), CWD)
-        return os.path.relpath(self.filename, common_prefix)
-
-    def render(self):
-        return {
-            "filename": self.filename,
-            "lnum": self.line,
-            "text": self.text
-        }
-
-DEVNULL = open(os.devnull, 'w')
 try:
-    FILE = sys.argv[1]
-    CWD = sys.argv[2]
+    COMMAND = sys.argv[1]
+    FILE = sys.argv[2]
+    CWD = sys.argv[3]
 # Sometimes not enough parameters are passed in, which means that the
 # user tried to run `cargo build` on an empty buffer, or something
 # like that.
@@ -62,39 +52,33 @@ while not os.path.isfile(CARGO_DIR + "/Cargo.toml"):
 
 try:
     stdout = subprocess.check_output(
-            ["cargo", "build", "--message-format=json"],
-            stderr=DEVNULL,
+            ["cargo", COMMAND, "--message-format=json"],
+            # If you don't provide this option, it'll end up
+            # emitting some data to the screen.
+            stderr=open(os.devnull, 'w'),
             cwd=CARGO_DIR
     )
+# It's necessary to catch this error because rust will
+# intentionally return exit code > 0 when the build/test
+# fails, but it'll still output the correct info.
 except subprocess.CalledProcessError as e:
     stdout = e.output
 
-errors = []
-warnings = []
-for line in str(stdout).split('\n'): 
-   if line == "":
-        continue
-    
-   try:
-        cargo_message = json.loads(line)
-   except ValueError:
-        error("Problem parsing output of `cargo build`. Do you have cargo installed?")
-   if cargo_message['reason'] != 'compiler-message':
-       continue
+quickfix = []
+try:
+    quickfix = parse.parse_command_output(
+        COMMAND,
+        str(stdout),
+        transform_relative_path
+    )
+except parse.CargoParseError as e:
+    error(str(e))
 
-   for msg in cargo_message['message']['spans']:
-       message = Message()
-       message.filename = msg['file_name']
-       message.line     = msg['line_start']
-       message.text     = msg['label']
-       message.column   = msg['column_start']
-       errors.append(message.render())
-
-reason = "`cargo build`: success"
-if len(errors) > 0:
-    reason = "`cargo build` failed, check quickfix"
+reason = "`cargo %s`: success" % COMMAND
+if len(quickfix) > 0:
+    reason = "`cargo %s` failed, check quickfix" % COMMAND
 
 finish({
     "message": reason,
-    "quickfix": errors
+    "quickfix": [ m.render() for m in quickfix ]
 })
