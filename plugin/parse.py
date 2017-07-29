@@ -23,6 +23,9 @@ class Message(object):
         self.line = 0
         self.column = 0
 
+        # self.level can either be "warning" or "error".
+        self.level = 'error'
+
     def render(self):
         if self.text is None:
             self.text = ""
@@ -30,7 +33,8 @@ class Message(object):
         return {
             "filename": self.filename,
             "lnum": self.line,
-            "text": self.text
+            "text": self.text,
+            "type": "W" if self.level == 'warning' else "E",
         }
 
     def __eq__(self, other):
@@ -45,24 +49,32 @@ class Message(object):
         return "%s:%s || %s" % (self.filename, self.line, self.text)
 
 def parse_command_output(command, output, path_transformer):
+    errors = []
+    warnings = []
     if command == "build":
-        return parse_build_output(output, path_transformer)
+        errors, warnings = parse_build_output(output, path_transformer)
     elif command == "test":
-        return parse_test_output(output, path_transformer)
+        errors, _ = parse_build_output(output, path_transformer)
+        if len(errors) == 0:
+            errors = parse_test_output(output, path_transformer)
+    else:
+        raise CargoParseError("No such command: `%s`" % command)
 
-    raise CargoParseError("No such command: `%s`" % command)
+    return _deduplicate_messages(errors), _deduplicate_messages(warnings)
 
 def parse_build_output(output, path_transformer):
     errors = []
+    warnings = []
+    skipped_build_due_to_fresh_cache = True
     for line in output.split('\n'):
-        if line == "":
-            continue
-
         try:
             cargo_message = json.loads(line)
         except ValueError:
-            raise CargoParseError("Problem parsing output of `cargo build`. Do you have cargo installed?")
+            continue
 
+        if cargo_message['reason'] == 'compiler-artifact':
+            if not cargo_message['fresh']:
+                skipped_build_due_to_fresh_cache = False
         if cargo_message['reason'] != "compiler-message":
             continue
 
@@ -71,10 +83,24 @@ def parse_build_output(output, path_transformer):
             message.filename = path_transformer(msg['file_name'])
             message.line = msg['line_start']
             message.text = msg['label']
+            message.level = cargo_message['message']['level']
+            # For some reason, warnings are not written to the 'label'. So we
+            # need to read them from 'message'->'message' instead.
+            if not message.text:
+                message.text = cargo_message['message']['message']
             message.column = msg['column_start']
-            errors.append(message)
 
-    return errors
+            if message.level == 'warning':
+                warnings.append(message)
+            else:
+                errors.append(message)
+
+    if skipped_build_due_to_fresh_cache:
+        cache_warning = Message()
+        cache_warning.text = "`cargo` skipped build since there were no changes since last build. To force rebuild, update the timestamp on a file (e.g. :w)."
+        warnings.append(cache_warning)
+
+    return errors, warnings
 
 def _parse_accumulated_message(text, path_transformer):
     expr = "---- ([^\s]+) [^\s]+ ----.+panicked at '(.*)', (.*):(\d+)"
@@ -88,6 +114,17 @@ def _parse_accumulated_message(text, path_transformer):
     m.line = int(results.group(4))
     return m
 
+# _deduplicate_messages makes sure that duplicate warnings/errors aren't
+# repeated in the quickfix tray. For some reason, this can sometimes happen,
+# and I'm not really sure how to avoid it via cargo flags, so we can just
+# deduplicate here.
+def _deduplicate_messages(messages):
+    output = {}
+    for m in messages:
+        output[str(m)] = m
+
+    return [ m for m in output.values() ]
+
 def parse_test_output(output, path_transformer):
     lines = [ line.strip() for line in output.split('\n') ]
     accumulated_message = ""
@@ -96,7 +133,7 @@ def parse_test_output(output, path_transformer):
         if accumulated_message != "":
             if line.startswith("----"):
                 messages.append(_parse_accumulated_message(
-                    accumulated_message, 
+                    accumulated_message,
                     path_transformer
                 ))
                 accumulated_message = line
@@ -108,7 +145,7 @@ def parse_test_output(output, path_transformer):
 
     if accumulated_message != "":
         messages.append(_parse_accumulated_message(
-            accumulated_message, 
+            accumulated_message,
             path_transformer
         ))
 

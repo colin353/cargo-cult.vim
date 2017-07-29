@@ -1,4 +1,4 @@
-#
+
 #   cargo.py
 #
 #   Author:     Colin Merkel
@@ -66,7 +66,7 @@ except subprocess.CalledProcessError as e:
 
 quickfix = []
 try:
-    quickfix = parse.parse_command_output(
+    errors, warnings = parse.parse_command_output(
         COMMAND,
         str(stdout),
         transform_relative_path
@@ -75,8 +75,12 @@ except parse.CargoParseError as e:
     error(str(e))
 
 reason = "`cargo %s`: success" % COMMAND
-if len(quickfix) > 0:
+if len(errors) > 0:
     reason = "`cargo %s` failed, check quickfix" % COMMAND
+    quickfix = errors
+elif len(warnings) > 0:
+    reason = "`cargo %s` succeeded with warnings, check quickfix" % COMMAND
+    quickfix = warnings
 
 finish({
     "message": reason,
