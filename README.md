@@ -1,6 +1,6 @@
 # cargo-cult.vim
 
-This script runs the `cargo build` and `cargo test` commands and 
+This script runs the `cargo build` and `cargo test` commands and
 puts the formatted output into the quickfix list.
 
 ## Features to add
@@ -13,7 +13,7 @@ puts the formatted output into the quickfix list.
  - [x] Support warnings
  - [ ] Rewrite the python to be more readable and with more clear
        error messages.
- - [ ] Make a check.py file which will make sure you have cargo 
+ - [ ] Make a check.py file which will make sure you have cargo
        installed, correct vim version, etc.
  - [ ] Add installation instructions to this README.md
  - [ ] Get some nice command shortcuts, and describe them in this file.
@@ -21,5 +21,7 @@ puts the formatted output into the quickfix list.
 ## Bugs
 
  - [ ] There's some kind of bug where it occasionally prints blank error
-       messages for each compiled file even when no errors occurred, I 
+       messages for each compiled file even when no errors occurred, I
        think this relates to recompiling when it was cached.
+ - [ ] The file path translator sometimes gets the path wrong. I'm building
+       from flagger/Users/colinmerkel/Documents/rust/flags/src/parse.rs

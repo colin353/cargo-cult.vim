@@ -15,15 +15,16 @@ import parse
 def path_transformer(path):
     return path
 
-def message_object(filename, line, text, warning=False):
+def message_object(filename, line, text, warning=False, column=0):
     m = parse.Message()
     m.text = text
     m.filename = filename
     m.line = line
+    m.column = column
     m.level = 'warning' if warning else 'error'
     return m
 
-def message(filename, line, text, warning=False):
+def message(filename, line, text, warning=False, column=0):
     return message_object(filename, line, text, warning).render()
 
 class TestParseData(unittest.TestCase):
@@ -96,6 +97,54 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured
                 parse._deduplicate_messages(messages),
                 expected_messages,
         )
+
+    def test_cargo_test(self):
+        stdout = """
+
+running 9 tests
+test tests::find_a_block ... FAILED
+test tests::construct_sstable_builder ... ok
+test tests::construct_sstable_builder_backwards ... ok
+test tests::serialize_i64 ... ok
+test tests::serialize_proto ... ok
+test tests::read_next_key_on_constructed_sstable ... ok
+test tests::read_constructed_sstable_with_iter ... ok
+test tests::find_a_key ... FAILED
+test tests::write_a_very_long_sstable ... ok
+
+failures:
+
+---- tests::find_a_block stdout ----
+	thread 'tests::find_a_block' panicked at 'assertion failed: `(left == right)`
+  left: `None`,
+ right: `Some(123)`', src/lib.rs:502:8
+note: Run with `RUST_BACKTRACE=1` for a backtrace.
+
+---- tests::find_a_key stdout ----
+	thread 'tests::find_a_key' panicked at 'assertion failed: `(left == right)`
+  left: `None`,
+ right: `Some(500)`', src/lib.rs:479:8
+"""
+        errors = parse.parse_test_output(stdout, path_transformer)
+        self.maxDiff = 10000
+        self.assertItemsEqual(
+            [ m.render() for m in errors ],
+            [
+                message("src/lib.rs", 479, "tests::find_a_key assertion failed: `(left == right)` left: `None`, right: `Some(500)`", column=8),
+                message("src/lib.rs", 502, "tests::find_a_block assertion failed: `(left == right)` left: `None`, right: `Some(123)`", column=8),
+            ]
+        )
+
+    def test_relative_paths(self):
+        self.assertEqual(
+                parse.transform_relative_path(
+                    "src/lib.rs",
+                    "/Users/colinmerkel/Documents/rust/sstable",
+                    "/Users/colinmerkel/Documents/rust",
+                ),
+                "sstable/src/lib.rs"
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

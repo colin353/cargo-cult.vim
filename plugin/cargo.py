@@ -24,11 +24,8 @@ def error(reason):
         "quickfix": []
     })
 
-# transform_relative_path takes a file path relative to the 
-# cargo directory and transforms it into a path relative to the
-# CWD inside of vim, which is passed as a command line argument.
 def transform_relative_path(cargo_path):
-    return os.path.relpath("%s/%s" % (CARGO_DIR, cargo_path), CWD)
+    return parse.transform_relative_path(cargo_path, CARGO_DIR, CWD)
 
 try:
     COMMAND = sys.argv[1]
@@ -84,5 +81,5 @@ elif len(warnings) > 0:
 
 finish({
     "message": reason,
-    "quickfix": [ m.render() for m in quickfix ]
+    "quickfix": [m.render() for m in quickfix]
 })

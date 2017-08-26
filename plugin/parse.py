@@ -16,6 +16,12 @@ import re
 class CargoParseError(Exception):
     pass
 
+# transform_relative_path takes a file path relative to the
+# cargo directory and transforms it into a path relative to the
+# CWD inside of vim, which is passed as a command line argument.
+def transform_relative_path(cargo_path, cargo_dir, working_dir):
+    return os.path.relpath("%s/%s" % (cargo_dir, cargo_path), working_dir)
+
 class Message(object):
     def __init__(self):
         self.text = ""
@@ -82,6 +88,14 @@ def parse_build_output(output, path_transformer):
             message = Message()
             message.filename = path_transformer(msg['file_name'])
             message.line = msg['line_start']
+
+            # Sometimes it's the case that the error occurred inside macro-expanded code.
+            # In that case, this filename isn't the one we want. We want the data from
+            # inside the expansion, which maps back to the original code.
+            if message.filename.startswith('<'):
+                message.filename = msg['expansion']['span']['file_name']
+                message.line = msg['expansion']['span']['line_start']
+
             message.text = msg['label']
             message.level = cargo_message['message']['level']
             # For some reason, warnings are not written to the 'label'. So we
@@ -103,15 +117,17 @@ def parse_build_output(output, path_transformer):
     return errors, warnings
 
 def _parse_accumulated_message(text, path_transformer):
-    expr = "---- ([^\s]+) [^\s]+ ----.+panicked at '(.*)', (.*):(\d+)"
+    expr = r"---- ([^\s]+) [^\s]+ ----.+panicked at '(.*)', ([^\:]*):(\d+):?(\d+)?"
     results = re.match(expr, text)
     if not results:
         raise CargoParseError("Can't parse test output: %s" % text)
 
     m = Message()
     m.text = "%s %s" % (results.group(1), results.group(2))
-    m.filename = results.group(3)
+    m.filename = path_transformer(results.group(3))
     m.line = int(results.group(4))
+    if results.group(5) is not None:
+        m.column = int(results.group(5))
     return m
 
 # _deduplicate_messages makes sure that duplicate warnings/errors aren't
@@ -138,7 +154,7 @@ def parse_test_output(output, path_transformer):
                 ))
                 accumulated_message = line
             else:
-                accumulated_message += line
+                accumulated_message += " " + line
 
         elif line.startswith("----"):
                 accumulated_message = line
