@@ -68,6 +68,46 @@ def parse_command_output(command, output, path_transformer):
 
     return _deduplicate_messages(errors), _deduplicate_messages(warnings)
 
+def parse_bazel_output(command, output, path_transformer):
+    errors = []
+    warnings = []
+    if command == "build":
+        errors = parse_bazel_build_output(output, path_transformer)
+    elif command == "test":
+        errors = parse_test_output(output, path_transformer)
+
+    return _deduplicate_messages(errors), _deduplicate_messages(warnings)
+
+def parse_bazel_build_output(output, path_transformer):
+    errors = []
+
+    lines = iter(output.split("\n"))
+    try:
+        while True:
+            line = next(lines).strip()
+            expr = r"^error\[E[0-9]+]: (.*)"
+            results = re.match(expr, line)
+            if not results:
+                continue
+
+            m = Message()
+            m.text = results.group(1)
+
+            line = next(lines).strip()
+            expr = r"^--> (.*?):([0-9]+):([0-9]+)"
+            results = re.match(expr, line)
+            if not results:
+                continue
+
+            m.filename = path_transformer(results.group(1))
+            m.line = int(results.group(2))
+            m.column = int(results.group(3))
+            errors.append(m)
+    except StopIteration:
+        pass
+
+    return errors
+
 def parse_build_output(output, path_transformer):
     errors = []
     warnings = []
@@ -157,7 +197,7 @@ def parse_test_output(output, path_transformer):
                 accumulated_message += " " + line
 
         elif line.startswith("----"):
-                accumulated_message = line
+            accumulated_message = line
 
     if accumulated_message != "":
         messages.append(_parse_accumulated_message(

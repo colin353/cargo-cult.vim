@@ -145,6 +145,28 @@ note: Run with `RUST_BACKTRACE=1` for a backtrace.
                 "sstable/src/lib.rs"
         )
 
+    def test_error_parsing(self):
+        stdout = """
+error[E0425]: cannot find value `asdf1` in this scope
+   --> largetable/largetable_test.rs:209:23
+|
+209 |         assert_eq!(0, asdf1);
+|                       ^^^^^ not found in this scope
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0425`.
+Target //largetable:largetable_test failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+"""
+
+        errors = parse.parse_bazel_build_output(stdout, path_transformer)
+        
+        self.assertEqual(
+            [ m.render() for m in errors ],
+            [ message("largetable/largetable_test.rs", 209, "cannot find value `asdf1` in this scope", column=23) ]
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
