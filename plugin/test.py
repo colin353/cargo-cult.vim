@@ -167,6 +167,26 @@ Use --verbose_failures to see the command lines of failed build steps.
             [ message("largetable/largetable_test.rs", 209, "cannot find value `asdf1` in this scope", column=23) ]
         )
 
+    def test_error_parsing_2(self):
+        stdout = """
+error: couldn't read util/ws/template.html: No such file or directory (os error 2)
+ --> util/ws/server.rs:7:25
+  |
+7 | static TEMPLATE: &str = include_str!("template.html");
+  |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to previous error
+
+Target //util/ws:server failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+"""
+
+        errors = parse.parse_bazel_build_output(stdout, path_transformer)
+        
+        self.assertEqual(
+            [ m.render() for m in errors ],
+            [ message("util/ws/server.rs", 7, "couldn't read util/ws/template.html: No such file or directory (os error 2)", column=25) ]
+        )
 
 if __name__ == '__main__':
     unittest.main()

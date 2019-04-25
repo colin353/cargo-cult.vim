@@ -85,13 +85,13 @@ def parse_bazel_build_output(output, path_transformer):
     try:
         while True:
             line = next(lines).strip()
-            expr = r"^error\[E[0-9]+]: (.*)"
+            expr = r"^error(\[E[0-9]+\])?: (.*)"
             results = re.match(expr, line)
             if not results:
                 continue
 
             m = Message()
-            m.text = results.group(1)
+            m.text = results.group(2)
 
             line = next(lines).strip()
             expr = r"^--> (.*?):([0-9]+):([0-9]+)"
