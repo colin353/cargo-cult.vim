@@ -122,7 +122,19 @@ def parse_bazel_build_output(output, path_transformer):
                 expr = r"^\s*[0-9]*\s*\|(.*)"
                 results = re.match(expr, line)
                 if not results:
-                    break
+                    # it may be a help message, try that
+                    expr = r"^([\s=]*)help: (.*)"
+                    results = re.match(expr, line)
+                    if not results:
+                        break
+
+                    m = m.clone()
+                    m.text = results.group(2)
+                    errors.append(m)
+
+                    line = next(lines)
+                    continue
+                    
 
                 # Strip out empty lines that take up space in quickfix
                 if results.group(1) == "":
@@ -130,7 +142,7 @@ def parse_bazel_build_output(output, path_transformer):
                     continue
 
                 m = m.clone()
-                m.text = results.group(1)
+                m.text = " | %s" % results.group(1)
                 errors.append(m)
                 line = next(lines)
 

@@ -166,8 +166,8 @@ Use --verbose_failures to see the command lines of failed build steps.
             [ m.render() for m in errors ],
             [ 
                 message("largetable/largetable_test.rs", 209, "cannot find value `asdf1` in this scope", column=23),
-                message("largetable/largetable_test.rs", 209, "         assert_eq!(0, asdf1);", column=23),
-                message("largetable/largetable_test.rs", 209, "                       ^^^^^ not found in this scope", column=23) 
+                message("largetable/largetable_test.rs", 209, " |          assert_eq!(0, asdf1);", column=23),
+                message("largetable/largetable_test.rs", 209, " |                        ^^^^^ not found in this scope", column=23) 
             ]
         )
 
@@ -191,10 +191,40 @@ Use --verbose_failures to see the command lines of failed build steps.
             [ m.render() for m in errors ],
             [ 
                 message("util/ws/server.rs", 7, "couldn't read util/ws/template.html: No such file or directory (os error 2)", column=25),
-                message("util/ws/server.rs", 7, " static TEMPLATE: &str = include_str!(\"template.html\");", column=25),
-                message("util/ws/server.rs", 7, "                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^", column=25)
+                message("util/ws/server.rs", 7, " |  static TEMPLATE: &str = include_str!(\"template.html\");", column=25),
+                message("util/ws/server.rs", 7, " |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^", column=25)
             ]
         )
+
+
+    def test_error_parsing_3(self):
+        stdout = """
+error[E0599]: no method named `serve` found for type `server::ReviewServer` in the current scope
+ --> util/ws/main.rs:7:33
+  |
+7 |     server::ReviewServer::new().serve(8080);
+  |                                 ^^^^^
+  |
+  = help: items from traits can only be used if the trait is in scope
+help: the following trait is implemented but not in scope, perhaps add a `use` for it:
+  |
+6 | use ws::Server;
+  |
+"""
+        errors = parse.parse_bazel_build_output(stdout, path_transformer)
+
+        self.assertEqual(
+            [ m.render() for m in errors ],
+            [ 
+                message("util/ws/main.rs", 7, "no method named `serve` found for type `server::ReviewServer` in the current scope", column=25),
+                message("util/ws/main.rs", 7, " |      server::ReviewServer::new().serve(8080);", column=25),
+                message("util/ws/main.rs", 7, " |                                  ^^^^^", column=25),
+                message("util/ws/main.rs", 7, "items from traits can only be used if the trait is in scope", column=25),
+                message("util/ws/main.rs", 7, "the following trait is implemented but not in scope, perhaps add a `use` for it:", column=25),
+                message("util/ws/main.rs", 7, " |  use ws::Server;", column=25)
+            ]
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
