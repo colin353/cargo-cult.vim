@@ -164,7 +164,11 @@ Use --verbose_failures to see the command lines of failed build steps.
         
         self.assertEqual(
             [ m.render() for m in errors ],
-            [ message("largetable/largetable_test.rs", 209, "cannot find value `asdf1` in this scope", column=23) ]
+            [ 
+                message("largetable/largetable_test.rs", 209, "cannot find value `asdf1` in this scope", column=23),
+                message("largetable/largetable_test.rs", 209, "         assert_eq!(0, asdf1);", column=23),
+                message("largetable/largetable_test.rs", 209, "                       ^^^^^ not found in this scope", column=23) 
+            ]
         )
 
     def test_error_parsing_2(self):
@@ -182,10 +186,14 @@ Use --verbose_failures to see the command lines of failed build steps.
 """
 
         errors = parse.parse_bazel_build_output(stdout, path_transformer)
-        
+
         self.assertEqual(
             [ m.render() for m in errors ],
-            [ message("util/ws/server.rs", 7, "couldn't read util/ws/template.html: No such file or directory (os error 2)", column=25) ]
+            [ 
+                message("util/ws/server.rs", 7, "couldn't read util/ws/template.html: No such file or directory (os error 2)", column=25),
+                message("util/ws/server.rs", 7, " static TEMPLATE: &str = include_str!(\"template.html\");", column=25),
+                message("util/ws/server.rs", 7, "                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^", column=25)
+            ]
         )
 
 if __name__ == '__main__':

@@ -54,6 +54,15 @@ class Message(object):
     def __repr__(self):
         return "%s:%s || %s" % (self.filename, self.line, self.text)
 
+    def clone(self):
+        m = Message()
+        m.text = self.text
+        m.filename = self.filename
+        m.line = self.line
+        m.column = self.column
+        m.level = self.level
+        return m
+
 def parse_command_output(command, output, path_transformer):
     errors = []
     warnings = []
@@ -103,6 +112,28 @@ def parse_bazel_build_output(output, path_transformer):
             m.line = int(results.group(2))
             m.column = int(results.group(3))
             errors.append(m)
+
+            # Following the error is sometimes an informative hint
+            # on where to look for the issue. Append the helpful hint
+            # right after the error text.
+            line = next(lines)
+            while line.strip() != "":
+                # Strip out the line number prefixes
+                expr = r"^\s*[0-9]*\s*\|(.*)"
+                results = re.match(expr, line)
+                if not results:
+                    break
+
+                # Strip out empty lines that take up space in quickfix
+                if results.group(1) == "":
+                    line = next(lines)
+                    continue
+
+                m = m.clone()
+                m.text = results.group(1)
+                errors.append(m)
+                line = next(lines)
+
     except StopIteration:
         pass
 
@@ -175,11 +206,16 @@ def _parse_accumulated_message(text, path_transformer):
 # and I'm not really sure how to avoid it via cargo flags, so we can just
 # deduplicate here.
 def _deduplicate_messages(messages):
-    output = {}
+    seen = {}
+    output = []
     for m in messages:
-        output[str(m)] = m
+        if str(m) in seen:
+            continue
+        
+        output.append(m)
+        seen[str(m)] = True
 
-    return [ m for m in output.values() ]
+    return output
 
 def parse_test_output(output, path_transformer):
     lines = [ line.strip() for line in output.split('\n') ]
